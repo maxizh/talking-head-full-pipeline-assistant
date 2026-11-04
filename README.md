@@ -1,3 +1,5 @@
+中文 | [English](README_EN.md)
+
 # 口播全流程助手
 
 Talking-Head Full Pipeline Assistant. 跑在本机的口播助手：按主题写口播稿、用 OBS 录口播、提词器跟读，录完自动剪掉冷场和讲错的地方，再烧上字幕。
