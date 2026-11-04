@@ -1,0 +1,16 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "assistant",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source env.sh && exec python -m agent.server"],
+      "port": 8788
+    },
+    {
+      "name": "preflight",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "source env.sh && exec python preflight.py"]
+    }
+  ]
+}

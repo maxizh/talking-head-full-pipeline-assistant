@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>提词器 · 口播全流程助手</title>
+<style>
+  :root { --speed-ui: #6fd6b8; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: #000; color: #fff; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif;
+    overflow: hidden;
+  }
+
+  #hud {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2;
+    display: flex; gap: 18px; align-items: center;
+    padding: 10px 20px;
+    font-size: 14px; font-family: ui-monospace, monospace;
+    color: #8a8f8c; background: linear-gradient(#000 60%, transparent);
+  }
+  #hud b { color: var(--speed-ui); font-weight: 600; }
+  #hud .keys { margin-left: auto; }
+
+  #hud button {
+    font: inherit; font-size: 13px; font-weight: 600;
+    border: 1px solid #43484f; border-radius: 7px;
+    padding: 5px 13px; cursor: pointer;
+    background: #1c1f24; color: #d8d2ec;
+  }
+  #hud button:hover:not(:disabled) { border-color: var(--speed-ui); }
+  #hud button:disabled { opacity: .35; cursor: default; }
+  #rec { color: #ff8b7e; }
+  #rec.live { background: #46181a; border-color: #ff6b5b; color: #ffd9d4; }
+  #recinfo { color: #8a8f8c; font-size: 12px; }
+  #recinfo.bad { color: #ff8b7e; }
+
+  #viewport { position: absolute; inset: 0; overflow: hidden; }
+  #script {
+    position: absolute; left: 0; right: 0; top: 0;
+    padding: 55vh 8vw 60vh;
+    font-size: 48px; line-height: 1.55; font-weight: 600;
+    letter-spacing: 0.01em; white-space: pre-wrap; word-break: break-word;
+    text-shadow: 0 2px 12px rgba(0,0,0,.9);
+  }
+  #script .src { display: block; font-size: 24px; color: #7d8280; margin: 6px 0 30px; }
+  #script p { margin: 0 0 34px; }
+
+  /* 中线，方便对齐视线 */
+  #line {
+    position: fixed; left: 0; right: 0; top: 45%;
+    border-top: 2px solid rgba(111,214,184,.35); pointer-events: none;
+  }
+  #paused {
+    position: fixed; inset: auto 0 12vh 0; text-align: center;
+    font-size: 28px; color: var(--speed-ui); letter-spacing: .3em;
+  }
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>状态 <b id="state">等待稿件</b></span>
+  <span>速度 <b id="speed">60</b> px/s</span>
+  <button id="rec" type="button">● 开录</button>
+  <button id="stoprec" type="button" disabled>■ 停录</button>
+  <span id="recinfo"></span>
+  <span class="keys">空格 播放/暂停 · ↑↓ 调速 · R 回顶</span>
+</div>
+<div id="line"></div>
+<div id="viewport"><div id="script"></div></div>
+<div id="paused" hidden>已暂停</div>
+
+<script>
+const el = { script: document.getElementById('script'), state: document.getElementById('state'),
+             speed: document.getElementById('speed'), paused: document.getElementById('paused'),
+             rec: document.getElementById('rec'), stopRec: document.getElementById('stoprec'),
+             recInfo: document.getElementById('recinfo') };
+let offset = 0, speed = 60, running = false, last = null;
+
+function render(text) {
+  el.script.innerHTML = '';
+  for (const para of (text || '').split(/\n{2,}/)) {
+    if (!para.trim()) continue;
+    const p = document.createElement('p');
+    // [来源:xxx] 单独一行小字显示，不念出来也不碍眼
+    const m = para.match(/^([\s\S]*?)\s*(\[来源[:：][^\]]*\])\s*$/);
+    p.textContent = m ? m[1].trim() : para.trim();
+    if (m) { const s = document.createElement('span'); s.className = 'src'; s.textContent = m[2]; p.appendChild(s); }
+    el.script.appendChild(p);
+  }
+  reset();
+}
+
+let finishReported = false;
+function reportFinished() {
+  if (finishReported) return;
+  finishReported = true;
+  fetch('/api/teleprompter/finished', { method: 'POST' }).catch(() => {});
+  el.state.textContent = '已到底';
+}
+
+function reset() { offset = 0; el.script.style.transform = 'translateY(0)'; finishReported = false; }
+function setRunning(on) {
+  running = on; last = null;
+  el.state.textContent = on ? '滚动中' : (el.script.textContent ? '已暂停' : '等待稿件');
+  el.paused.hidden = on || !el.script.textContent;
+}
+function setSpeed(v) { speed = Math.max(10, Math.min(400, v)); el.speed.textContent = Math.round(speed); }
+
+function frame(ts) {
+  if (running) {
+    if (last !== null) {
+      offset += speed * (ts - last) / 1000;
+      const max = el.script.scrollHeight;
+      if (offset > max) {
+        offset = max;
+        setRunning(false);
+        reportFinished();   // 告诉服务「念完了」，好据此收尾（比如停录）
+      }
+      el.script.style.transform = `translateY(${-offset}px)`;
+    }
+    last = ts;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function showRecording(frame) {
+  if (frame.ok === false) {
+    el.recInfo.textContent = frame.error || '录制操作失败';
+    el.recInfo.className = 'bad';
+    return;
+  }
+  const live = !!frame.active;
+  el.rec.classList.toggle('live', live);
+  el.rec.disabled = live;
+  el.stopRec.disabled = !live;
+  el.recInfo.className = '';
+  if (live) el.recInfo.textContent = '录制中';
+  else if (frame.outputPath) el.recInfo.textContent = '已保存 ' + frame.outputPath.split('/').pop();
+  else el.recInfo.textContent = '';
+}
+
+async function record(action) {
+  el.rec.disabled = el.stopRec.disabled = true;
+  el.recInfo.className = '';
+  el.recInfo.textContent = action === 'start' ? '正在开录…' : '正在停录…';
+  const url = new URL('/api/record/' + action, location.href).href;
+  try {
+    const res = await fetch(url, { method: 'POST' });
+    const body = await res.text();
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      // 返回的不是 JSON（多半是 404 的 HTML 错误页）——把真实情况显示出来
+      throw new Error(`HTTP ${res.status} @ ${url} 返回的不是 JSON：${body.slice(0, 60)}`);
+    }
+    showRecording(data);
+  } catch (err) {
+    showRecording({ ok: false, error: err.message });
+    el.rec.disabled = false;
+    el.stopRec.disabled = false;
+  }
+}
+
+el.rec.addEventListener('click', () => record('start'));
+el.stopRec.addEventListener('click', () => record('stop'));
+
+addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); setRunning(!running); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); setSpeed(speed + 10); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); setSpeed(speed - 10); }
+  else if (e.key === 'r' || e.key === 'R') { reset(); }
+});
+
+const es = new EventSource('/api/teleprompter/stream');
+es.onmessage = (ev) => {
+  const f = JSON.parse(ev.data);
+  if (f.type === 'script') { render(f.text); setRunning(false); }
+  else if (f.type === 'record') { showRecording(f); }
+  else if (f.type === 'control') {
+    if (f.speed) setSpeed(f.speed);
+    if (f.action === 'start') setRunning(true);
+    else if (f.action === 'pause') setRunning(false);
+    else if (f.action === 'reset') { reset(); setRunning(false); }
+  }
+};
+es.onerror = () => { el.state.textContent = '连接断开，重连中'; };
+</script>
+</body>
+</html>

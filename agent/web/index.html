@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>口播全流程助手</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1b1e23;
+    --panel-2: #23262c;
+    --line: #34383f;
+    --text: #eceae2;
+    --dim: #9a9c96;
+    --accent: #6fd6b8;
+    --warn: #e8a468;
+    --err: #e87c72;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+  header span { color: var(--dim); font-size: 12px; font-family: ui-monospace, monospace; }
+
+  #log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .row { display: flex; }
+  .row.user { justify-content: flex-end; }
+  .bubble {
+    max-width: min(680px, 78%);
+    padding: 10px 14px;
+    border-radius: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .user .bubble { background: var(--accent); color: #10221d; }
+  .assistant .bubble { background: var(--panel); border: 1px solid var(--line); }
+
+  .trace {
+    max-width: min(680px, 78%);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 12.5px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 8px 12px;
+    color: var(--dim);
+    overflow-x: auto;
+  }
+  .trace .call { color: var(--warn); }
+  .trace .ok { color: var(--accent); }
+  .trace .bad { color: var(--err); }
+  .trace div + div { margin-top: 4px; }
+  .error { color: var(--err); font-size: 13px; }
+
+  form {
+    display: flex;
+    gap: 10px;
+    padding: 14px 20px 18px;
+    border-top: 1px solid var(--line);
+  }
+  #text {
+    flex: 1;
+    resize: none;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+  }
+  #text:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button {
+    background: var(--accent);
+    color: #10221d;
+    border: 0;
+    border-radius: 10px;
+    padding: 0 20px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  #stop { background: #7a2f2a; color: #ffd9d4; }
+  .notice { color: var(--warn); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>口播全流程助手</h1>
+  <span id="status">就绪</span>
+</header>
+
+<div id="log"></div>
+
+<form id="form">
+  <textarea id="text" rows="2" placeholder="说点什么… （Enter 发送，Shift+Enter 换行）"></textarea>
+  <button id="send" type="submit">发送</button>
+  <button id="stop" type="button" hidden>■ 停止</button>
+</form>
+
+<script>
+const SESSION = crypto.randomUUID();
+const log = document.getElementById('log');
+const form = document.getElementById('form');
+const input = document.getElementById('text');
+const sendBtn = document.getElementById('send');
+const stopBtn = document.getElementById('stop');
+const status = document.getElementById('status');
+let running = null;       // 当前这一步的 Promise，null 表示空闲
+let controller = null;    // 兜底用：服务端不响应停止时本地断开
+
+function scroll() { log.scrollTop = log.scrollHeight; }
+
+function addBubble(role, text) {
+  const row = document.createElement('div');
+  row.className = 'row ' + role;
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  log.appendChild(row);
+  scroll();
+  return bubble;
+}
+
+function addTrace() {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const box = document.createElement('div');
+  box.className = 'trace';
+  row.appendChild(box);
+  log.appendChild(row);
+  scroll();
+  return box;
+}
+
+function traceLine(box, cls, text) {
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = text;
+  box.appendChild(line);
+  scroll();
+}
+
+function addNotice(text, cls) {
+  const row = document.createElement('div');
+  row.className = 'row';
+  const box = document.createElement('div');
+  box.className = cls;
+  box.textContent = text;
+  row.appendChild(box);
+  log.appendChild(row);
+  scroll();
+}
+
+function setRunning(on) {
+  sendBtn.hidden = on;
+  stopBtn.hidden = !on;
+  status.textContent = on ? '执行中…（可以继续打字，或按停止）' : '就绪';
+}
+
+async function stopRun() {
+  if (!running) return;
+  stopBtn.disabled = true;
+  stopBtn.textContent = '停止中…';
+  try {
+    await fetch('/api/cancel', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: SESSION })
+    });
+  } catch { /* 请求发不出去也要继续走到下面的本地兜底 */ }
+  // 服务端卡在长操作里（比如 ffmpeg 正在跑）时，本地先断开，别让界面一直卡着
+  const bail = setTimeout(() => controller && controller.abort(), 5000);
+  try { await running; } finally {
+    clearTimeout(bail);
+    stopBtn.disabled = false;
+    stopBtn.textContent = '■ 停止';
+  }
+}
+
+async function runChat(text) {
+  let bubble = null;
+  let trace = null;
+  controller = new AbortController();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session: SESSION, text }),
+      signal: controller.signal
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      const chunks = buf.split('\n\n');
+      buf = chunks.pop();
+
+      for (const chunk of chunks) {
+        const line = chunk.split('\n').find(l => l.startsWith('data:'));
+        if (!line) continue;
+        const frame = JSON.parse(line.slice(5).trim());
+
+        if (frame.type === 'text') {
+          if (!bubble) { bubble = addBubble('assistant', ''); trace = null; }
+          bubble.textContent += frame.delta;
+          scroll();
+        } else if (frame.type === 'tool_call') {
+          bubble = null;
+          trace = trace || addTrace();
+          traceLine(trace, 'call', `⚙ ${frame.name}(${JSON.stringify(frame.args)})`);
+        } else if (frame.type === 'tool_result') {
+          trace = trace || addTrace();
+          traceLine(trace, frame.ok ? 'ok' : 'bad',
+                    `${frame.ok ? '✓' : '✗'} ${frame.content}`);
+        } else if (frame.type === 'error') {
+          addNotice('✗ ' + frame.message, 'error');
+        } else if (frame.type === 'cancelled') {
+          addNotice('■ ' + frame.message, 'notice');
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') addNotice('■ 已断开这一步的连接', 'notice');
+    else addBubble('assistant', '连接失败: ' + err.message);
+  }
+}
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+
+  // 上一步还在跑就先把它停掉，再发新的——旧任务的产物不受影响
+  if (running) await stopRun();
+
+  input.value = '';
+  addBubble('user', text);
+  setRunning(true);
+  running = runChat(text).finally(() => {
+    running = null;
+    controller = null;
+    setRunning(false);
+    input.focus();
+  });
+});
+
+stopBtn.addEventListener('click', () => stopRun());
+
+// 提词器页面上的操作（开录/停录）在这边也实时显示出来
+const events = new EventSource('/api/events');
+events.onmessage = (ev) => {
+  const e = JSON.parse(ev.data);
+  addNotice(`● ${e.at} ${e.text}`, 'notice');
+};
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+
+input.focus();
+</script>
+</body>
+</html>
