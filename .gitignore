@@ -1,0 +1,50 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.python-version
+dist/
+build/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+.claude/worktrees/
+
+# Local corpus, recordings, and edit sidecars
+corpus/
+recordings/
+output/
+tmp/
+*.mp4
+*.mkv
+*.mov
+*.webm
+*.avi
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.aac
+*.srt
+*.words.json
+*.edit.json
+subtitle_preview.png
+agent/.teleprompter_script.txt
+
+# Logs
+*.log

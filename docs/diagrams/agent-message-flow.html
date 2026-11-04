@@ -1,0 +1,345 @@
+  <title>口播全流程助手 · 请求与消息流</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Karla:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #f7f6f2;
+    --surface: #ffffff;
+    --surface-2: #eeece4;
+    --text: #1d1e22;
+    --text-dim: #63645f;
+    --border: #d9d6c9;
+    --accent: #1f7a68;
+    --accent-soft: #dff1ea;
+    --warm: #a8571a;
+    --warm-soft: #f6e3d1;
+    --code-bg: #ece9dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --surface: #1b1e23;
+      --surface-2: #23262c;
+      --text: #eceae2;
+      --text-dim: #9a9c96;
+      --border: #34383f;
+      --accent: #6fd6b8;
+      --accent-soft: #1e332e;
+      --warm: #e8a468;
+      --warm-soft: #3a2c1c;
+      --code-bg: #22252b;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a;
+    --surface: #1b1e23;
+    --surface-2: #23262c;
+    --text: #eceae2;
+    --text-dim: #9a9c96;
+    --border: #34383f;
+    --accent: #6fd6b8;
+    --accent-soft: #1e332e;
+    --warm: #e8a468;
+    --warm-soft: #3a2c1c;
+    --code-bg: #22252b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Karla', ui-sans-serif, system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.65;
+  }
+  .wrap {
+    max-width: 880px;
+    margin: 0 auto;
+    padding-inline: 24px;
+    padding-block: 56px 80px;
+  }
+  h1 {
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 800;
+    font-size: clamp(1.7rem, 1.3rem + 1.6vw, 2.35rem);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    margin: 0 0 8px;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 1.02rem;
+    max-width: 62ch;
+    margin: 0 0 44px;
+  }
+  h2 {
+    font-family: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.3rem;
+    letter-spacing: -0.005em;
+    margin: 0 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  h2 .eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    text-transform: uppercase;
+    background: var(--accent-soft);
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+  section { margin-block: 56px; }
+  p { max-width: 68ch; }
+  code {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.05em 0.4em;
+  }
+
+  figure {
+    margin: 28px 0 8px;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--border);
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  .dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 10px 20px;
+    margin: 20px 0;
+    max-width: 68ch;
+  }
+  .dl dt {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 0.85rem;
+    color: var(--warm);
+    background: var(--warm-soft);
+    padding: 2px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    height: fit-content;
+  }
+  .dl dd { margin: 0; color: var(--text); }
+
+  ol.steps {
+    max-width: 68ch;
+    padding-left: 1.4em;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  ol.steps li::marker {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 0.85rem;
+  }
+</style>
+
+<div class="wrap">
+  <h1>请求头与消息流</h1>
+  <p class="subtitle">
+    口播全流程助手里，浏览器、<code>agent/server.py</code> 和 <code>agent/llm.py</code> 怎么对接：
+    认证头，以及 <code>run_agent</code> 每一轮在做什么。文字说明见
+    <code>docs/message-flow.md</code>。
+  </p>
+
+  <section>
+    <h2><span class="eyebrow">Fig. 1</span>系统拓扑</h2>
+    <p>三个进程内 / 外部角色：浏览器页面、你自己起的 <code>server.py</code>（<code>llm.py</code> 是它内部调用的一个模块，不是独立服务），和 Anthropic 的 API。</p>
+
+    <figure>
+      <svg viewBox="0 0 960 300" role="img" aria-label="浏览器通过 POST /api/chat 和 SSE 与 agent/server.py 通信，server.py 内部的 llm.py 模块再通过带认证头的 HTTPS 请求与 Anthropic API 通信">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="Manrope, sans-serif" font-weight="700" font-size="14" fill="currentColor">
+          <!-- Browser box -->
+          <rect x="20" y="70" width="210" height="110" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="125" y="100" text-anchor="middle">浏览器</text>
+          <text x="125" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="12" fill="currentColor" opacity="0.7">index.html</text>
+          <text x="125" y="150" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="11" opacity="0.6">fetch() 读 SSE 流</text>
+
+          <!-- Server box -->
+          <rect x="360" y="50" width="260" height="150" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="490" y="78" text-anchor="middle">agent/server.py</text>
+          <text x="490" y="99" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="12" opacity="0.7">ThreadingHTTPServer</text>
+          <rect x="390" y="130" width="200" height="46" rx="8" class="accentbox" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.3"/>
+          <text x="490" y="149" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="600" font-size="12" fill="var(--accent)">llm.py</text>
+          <text x="490" y="165" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="10" fill="var(--accent)" opacity="0.85">urllib 客户端</text>
+
+          <!-- API box -->
+          <rect x="730" y="70" width="210" height="110" rx="10" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="835" y="100" text-anchor="middle">Anthropic API</text>
+          <text x="835" y="122" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="11" opacity="0.7">ANTHROPIC_BASE_URL</text>
+          <text x="835" y="140" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="10" opacity="0.55">/v1/messages</text>
+
+          <!-- Browser <-> Server arrows -->
+          <line x1="230" y1="108" x2="358" y2="108" stroke="currentColor" stroke-width="1.5" marker-end="url(#arrow)"/>
+          <text x="294" y="98" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="10.5">POST /api/chat</text>
+
+          <line x1="358" y1="150" x2="230" y2="150" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+          <text x="294" y="166" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="10.5">SSE 流式帧</text>
+
+          <!-- Server(llm.py) <-> API arrows -->
+          <line x1="620" y1="140" x2="728" y2="140" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#arrow)"/>
+          <line x1="728" y1="162" x2="620" y2="162" stroke="currentColor" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+          <text x="674" y="192" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="10" opacity="0.6">响应: text / tool_use</text>
+        </g>
+
+        <!-- header label callout -->
+        <g font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--warm)">
+          <rect x="600" y="20" width="290" height="80" rx="8" fill="var(--warm-soft)" stroke="var(--warm)" stroke-width="1.2"/>
+          <text x="614" y="38" font-weight="600" font-size="11.5">headers ↓</text>
+          <text x="614" y="55">anthropic-version: 2023-06-01</text>
+          <text x="614" y="71">x-api-key: $ANTHROPIC_API_KEY</text>
+          <text x="614" y="87">或 Authorization: Bearer $ANTHROPIC_AUTH_TOKEN</text>
+          <line x1="674" y1="100" x2="640" y2="130" stroke="var(--warm)" stroke-width="1.3" marker-end="url(#arrow)"/>
+        </g>
+
+        <!-- env note under server -->
+        <g font-family="IBM Plex Mono, monospace" font-size="10.5" fill="currentColor" opacity="0.55">
+          <text x="490" y="230" text-anchor="middle">env: ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY</text>
+          <line x1="490" y1="200" x2="490" y2="222" stroke="currentColor" stroke-width="1.2" marker-end="url(#arrow)"/>
+        </g>
+      </svg>
+      <figcaption>
+        唯一暴露给浏览器的接口就是 <code>server.py</code> 的两条路由：<code>GET /</code> 吐页面，<code>POST /api/chat</code> 收消息、回 SSE 流。
+        <code>llm.py</code> 不是网络服务，是 <code>server.py</code> 进程内部直接调用的模块，它才是真正拿 header 去敲 Anthropic 的那一层。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">这些 header 什么用</span>认证 + 协议版本</h2>
+    <dl class="dl">
+      <dt>anthropic-version</dt>
+      <dd>固定写 <code>2023-06-01</code>。这不是你账号的版本，是"请求/响应字段按哪套协议解析"的版本号——锁死它，Anthropic 以后升级接口也不会突然改变你代码里字段的含义。</dd>
+      <dt>x-api-key</dt>
+      <dd>直连官方 Anthropic API 的标准认证方式，值来自 <code>ANTHROPIC_API_KEY</code>。</dd>
+      <dt>Authorization</dt>
+      <dd>值是 <code>Bearer $ANTHROPIC_AUTH_TOKEN</code>，用于兼容网关。两个都设置时 bearer 优先。</dd>
+    </dl>
+    <p>
+      <code>llm.py</code> 只读 <code>ANTHROPIC_*</code>。<code>env.sh</code> 会在对应的
+      <code>ANTHROPIC_*</code> 为空时，把旧名 <code>PARALLIGHT_BASE_URL</code> /
+      <code>PARALLIGHT_API_KEY</code> 映射过去。
+    </p>
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">Fig. 2</span><code>run_agent</code> 循环</h2>
+    <p>一次用户消息，模型可能不会一步给出答案——它可能先要求"帮我调个工具"。这个循环就是在处理这种来回。</p>
+
+    <figure>
+      <svg viewBox="0 0 900 600" role="img" aria-label="run_agent 循环：收到消息后调用 LLM，若返回 tool_use 则执行工具并把结果回填后再次调用 LLM，如此循环直到纯文本或达到 12 轮上限；每一步都会推送 SSE 帧到浏览器">
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="Manrope, sans-serif" font-weight="600" font-size="13.5" fill="currentColor">
+          <!-- A1 -->
+          <rect x="60" y="20" width="340" height="56" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="230" y="53" text-anchor="middle">收到 POST /api/chat {session, text}</text>
+
+          <!-- A2 -->
+          <rect x="60" y="130" width="340" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.6"/>
+          <text x="230" y="163" text-anchor="middle" fill="var(--accent)">调用 LLM（历史 + 新消息 + tools schema）</text>
+
+          <!-- A3 diamond -->
+          <polygon points="230,230 350,290 230,350 110,290" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="230" y="285" text-anchor="middle" font-size="13">响应里有</text>
+          <text x="230" y="303" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12">tool_use ?</text>
+
+          <!-- A4 -->
+          <rect x="60" y="400" width="340" height="56" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="230" y="424" text-anchor="middle">逐个执行工具</text>
+          <text x="230" y="443" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="11" opacity="0.65">SSE: tool_call 帧</text>
+
+          <!-- A5 -->
+          <rect x="60" y="490" width="340" height="66" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="230" y="514" text-anchor="middle">按 tool_use_id 组装 tool_result</text>
+          <text x="230" y="533" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="11" opacity="0.65">异常 → content=错误文本, is_error:true</text>
+          <text x="230" y="549" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="11" opacity="0.65">SSE: tool_result 帧</text>
+
+          <!-- B1 no-branch -->
+          <rect x="560" y="260" width="280" height="56" rx="9" fill="var(--warm-soft)" stroke="var(--warm)" stroke-width="1.5"/>
+          <text x="700" y="284" text-anchor="middle" fill="var(--warm)">纯文本回复</text>
+          <text x="700" y="303" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="400" font-size="11" fill="var(--warm)" opacity="0.85">SSE: text 帧（流式吐字）</text>
+
+          <!-- B2 -->
+          <rect x="560" y="350" width="280" height="50" rx="9" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="700" y="380" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="12">SSE: done 帧 → 前端收尾</text>
+        </g>
+
+        <!-- straight connectors -->
+        <g stroke="currentColor" stroke-width="1.4" fill="none">
+          <line x1="230" y1="76" x2="230" y2="128" marker-end="url(#arrow2)"/>
+          <line x1="230" y1="186" x2="230" y2="228" marker-end="url(#arrow2)"/>
+          <line x1="230" y1="350" x2="230" y2="398" marker-end="url(#arrow2)"/>
+          <line x1="230" y1="456" x2="230" y2="488" marker-end="url(#arrow2)"/>
+          <line x1="350" y1="290" x2="558" y2="288" marker-end="url(#arrow2)"/>
+          <line x1="700" y1="316" x2="700" y2="348" marker-end="url(#arrow2)"/>
+        </g>
+        <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="currentColor">
+          <text x="248" y="368" font-weight="600">是</text>
+          <text x="440" y="278" font-weight="600">否</text>
+        </g>
+
+        <!-- loop back curve -->
+        <path d="M 400 523 C 640 523, 640 158, 402 158" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-dasharray="1 0" marker-end="url(#arrow2)"/>
+        <g font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--accent)">
+          <text x="640" y="340" text-anchor="middle" font-weight="600">轮数 +1，回填 messages</text>
+          <text x="640" y="358" text-anchor="middle" opacity="0.85">回填结果，再叫一次 LLM</text>
+          <text x="640" y="120" text-anchor="middle" font-weight="600" fill="var(--warm)">&gt; 12 轮 → 中止，SSE: error 帧</text>
+        </g>
+      </svg>
+      <figcaption>
+        「是」这条分支绕一整圈回到"调用 LLM"，就是 <code>run_agent</code> 里的 <code>for round in range(12)</code>：模型要工具就给它工具，把结果喂回去，再问一次——直到它满意到只回文本为止。
+      </figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2><span class="eyebrow">按时间顺序</span>一条消息的完整旅程</h2>
+    <ol class="steps">
+      <li>浏览器里敲回车 → <code>fetch('/api/chat', {method:'POST', body:{session, text}})</code>。</li>
+      <li><code>server.py</code> 拿这个 session 的历史消息 + 新消息 + 工具 schema，调 <code>llm.py</code> 发给 Anthropic（带上面那些 header）。</li>
+      <li>模型要么直接回文本，要么在响应里带 <code>tool_use</code> 块，点名一个已注册的工具（诊断用的 <code>echo</code> 也在其中）。</li>
+      <li>有 <code>tool_use</code> 就在 Python 里实际执行对应函数，把返回值（或异常信息）按 <code>tool_use_id</code> 包成 <code>tool_result</code>，塞回消息列表。</li>
+      <li>带着更新后的消息列表，回到第 2 步再调一次模型——直到某一轮它只回纯文本，或者凑够 12 轮强制停止。</li>
+      <li>上面每一步的动静（吐字、调用了什么工具、工具结果、报错、结束）都实时编码成一帧 SSE，推给浏览器；页面里的 JS 读这个流，把工具调用渲染成 <code>⚙ name(args)</code>，结果渲染成 <code>✓</code> / <code>✗</code>。</li>
+    </ol>
+  </section>
+
+  <footer>Talking-Head Full Pipeline Assistant · agent/llm.py · agent/server.py · agent/web/index.html</footer>
+</div>
